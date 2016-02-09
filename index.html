@@ -1,0 +1,205 @@
+<!DOCTYPE HTML>
+<html lang="ru">
+<head>
+	<meta charset="UTF-8"/>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+	<meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+	<title>Частотник поисковых фраз</title>
+
+	<!-- Bootstrap -->
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"/>
+
+	<style type="text/css">
+		.mutest {
+			opacity: 0.3;
+		}
+
+		.sijeko_e {
+			color: #ff7000;
+			font-style: normal;
+		}
+	</style>
+</head>
+<body>
+
+<div class="container">
+
+	<h1 class="text-center">Частотник поисковых фраз</h1>
+
+	<p class="text-muted">Вставьте поисковые фразы с&nbsp;их&nbsp;частотами (целые числа без&nbsp;дробей), а&nbsp;мы&nbsp;разьбьём&nbsp;их
+		на&nbsp;категории.</p>
+
+	<div class="row">
+		<div class="col-md-12">
+			<label for="txt-keywords">Фразы с их частотами</label>
+			<textarea id="txt-keywords" class="form-control" rows="10" autofocus>привет 1 10’000
+привет 2 1’000
+привет 3 100’000
+привет 4 1’000’000
+</textarea>
+		</div>
+	</div>
+	<hr/>
+	<div class="row">
+		<div class="col-md-12">
+			<div id="div-message" class="alert"></div>
+			<table class="table table-condensed table-hover">
+				<thead>
+				<tr>
+					<th>Фраза</th>
+					<th>Частота</th>
+					<th>Ранг</th>
+				</tr>
+				</thead>
+				<tbody id="tbl-result">
+				</tbody>
+			</table>
+		</div>
+	</div>
+</div>
+
+
+<hr/>
+
+<footer class="container text-muted text-right">
+	<span class="mutest">Если вы&nbsp;заметили проблемы, пишите&nbsp;автору</span>
+	&middot;
+	<a href="https://github.com/sijeko/chastotnik">GitHub</a>
+	&middot;
+	© <a href="http://maximals.ru">MaximAL</a>, <a href="http://sijeko.ru">Sij<em class="sijeko_e">e</em>ko</a> 2016
+</footer>
+
+
+<!-- Скрипты
+     ======= -->
+<!-- jQuery -->
+<script type="text/javascript" src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
+<!-- Bootstrap -->
+<!--script type="text/javascript" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script-->
+<!-- Поехали! -->
+<script type="text/javascript">
+	jQuery(function ($) {
+
+		// Жёсткий, мужицкий стрикт
+		'use strict';
+
+		// Поехали!
+		var txtKeywords = $('#txt-keywords');
+		var divMessage = $('#div-message');
+		var tblResult = $('#tbl-result');
+		var keywords = [];
+
+		txtKeywords.select();
+
+		txtKeywords.on('input change', function () {
+			var rows = txtKeywords.val().split('\n');
+			keywords = [];
+			for (var i in rows) {
+				if (!rows.hasOwnProperty(i)) {
+					continue;
+				}
+				var row = $.trim(rows[i]);
+				if (row.length < 1) {
+					continue;
+				}
+
+				var match = row.match(/(.*?)(\d[\d’'.,]*)$/i);
+				if (match) {
+					keywords.push([
+						$.trim(match[1]),
+						parseInt(match[2].replace(/[^\d]+/gi, ''))
+					]);
+				}
+			}
+
+			processPhrases(keywords);
+			outPhrases(keywords);
+		}).change();
+
+
+		function processPhrases(keywords) {
+			if (keywords.length < 3) {
+				// Слишком мало данных
+				divMessage.addClass('alert alert-danger').text('Мало данных. Нужно хотя бы три фразы.');
+				return;
+			}
+
+			divMessage.removeClass('alert alert-danger').text('');
+
+			keywords.sort(keywordsCompare);
+			var logLow = Math.log10(keywords[0][1]);
+			var logMid = (keywords.length % 2 === 0) ?
+			(
+				Math.log10(keywords[parseInt((keywords.length - 1) / 2)][1]) +
+				Math.log10(keywords[parseInt((keywords.length + 1) / 2)][1])
+			) / 2.0
+				:
+				Math.log10(keywords[parseInt(keywords.length / 2)][1]);
+			var logHigh = Math.log10(keywords[keywords.length - 1][1]);
+
+			var tresholdLow = (logLow + logMid) / 2.0;
+			var tresholdHigh = (logMid + logHigh) / 2.0;
+
+			for (var i in keywords) {
+				if (!keywords.hasOwnProperty(i)) {
+					continue;
+				}
+				var frequency = Math.log10(keywords[i][1]);
+				if (frequency > tresholdHigh) {
+					keywords[i][2] = 3;
+				} else if (frequency > tresholdLow) {
+					keywords[i][2] = 2;
+				} else {
+					keywords[i][2] = 1;
+				}
+			}
+		}
+
+		function outPhrases(keywords) {
+			tblResult.html('');
+			for (var i in keywords) {
+				if (!keywords.hasOwnProperty(i)) {
+					continue;
+				}
+				var keyword = keywords[i];
+				//console.log(keyword);
+				tblResult.append(
+					'<tr class="' + (keyword[2] === 1 ? 'info' : (keyword[2] === 3 ? 'danger' : 'warning')) +
+					'"><td>' + keyword[0] + '</td><td>' +
+					keyword[1] + '</td><td>' +
+					(
+						keyword[2] === 1 ? '<abbr title="Низкая частота">НЧ</abbr>' :
+							(keyword[2] === 3 ? '<abbr title="Высокая частота">ВЧ</abbr>' :
+								'<abbr title="Средняя частота">СЧ</abbr>')
+					) + '</td></tr>'
+				);
+			}
+		}
+
+		function keywordsCompare(a, b) {
+			// Сравниваем частоту
+			if (a[1] < b[1]) {
+				return -1;
+			}
+			if (a[1] > b[1]) {
+				return 1;
+			}
+
+			// Сравниваем слова
+			if (a[0] < b[0]) {
+				return -1;
+			}
+			if (a[0] > b[0]) {
+				return 1;
+			}
+
+			// Одинаковые ключевые слова и частоты
+			return 0;
+		}
+	});
+</script>
+
+</body>
+</html>
+
